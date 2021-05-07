@@ -961,6 +961,22 @@ void TextEditor::Render()
 			auto lineNoWidth = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, buf, nullptr, nullptr).x;
 			drawList->AddText(ImVec2(lineStartScreenPos.x + mTextStart - lineNoWidth, lineStartScreenPos.y), mPalette[(int)PaletteIndex::LineNumber], buf);
 
+			// Render background for line.
+			if(line.size() > 0) {
+				float off = 0.0;
+				for(size_t i = 0; i < line.size(); i++) {
+					auto& g = line[i];
+					if(g.mChar == '\t') {
+						off = (1.0f + std::floor((1.0f + off) / (float(mTabSize) * spaceSize))) * (float(mTabSize) * spaceSize);
+					}
+					else {
+						off += mCharAdvance.x;
+					}
+				}
+				ImVec2 cstart(textScreenPos.x, lineStartScreenPos.y);
+				ImVec2 cend(textScreenPos.x + off, lineStartScreenPos.y + mCharAdvance.y);
+				drawList->AddRectFilled(cstart, cend, mPalette[(int)PaletteIndex::LineBackground]);
+			}
 
 			if (mState.mCursorPosition.mLine == lineNo)
 			{
@@ -979,7 +995,7 @@ void TextEditor::Render()
 				{
 					auto timeEnd = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 					auto elapsed = timeEnd - mStartTime;
-					if (elapsed > 200)
+					if (elapsed > 350)
 					{
 
 						auto textSize = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, " ", nullptr, nullptr);
@@ -1018,12 +1034,7 @@ void TextEditor::Render()
 						cend = ImVec2(textScreenPos.x + cx + width + cursor_edge, lineStartScreenPos.y + mCharAdvance.y + cursor_edge);
 						drawList->AddRectFilled(cstart, cend, mPalette[(int)PaletteIndex::CursorEdge]);
 						
-						/*
-						ImVec2 cstart(textScreenPos.x + cx, lineStartScreenPos.y);
-						ImVec2 cend(textScreenPos.x + cx + width, lineStartScreenPos.y + mCharAdvance.y);
-						drawList->AddRectFilled(cstart, cend, mPalette[(int)PaletteIndex::Cursor]);
-						*/
-						if (elapsed > 400)
+						if (elapsed > 700)
 							mStartTime = timeEnd;
 					}
 				}

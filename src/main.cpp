@@ -3,6 +3,10 @@
 // so i can code shader effects without going to shadertoy website.
 
 #include <stdio.h>
+#include <errno.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
@@ -74,24 +78,16 @@ void link_shaders(int* program, int vs, int fs) {
 	glDeleteShader(fs);
 }
 
-/*
-void show_editor(std::string* shader_code, int w, int h) {
-	ImGui::SetNextWindowPos(ImVec2(0.0, 0.0));
-	ImGui::SetNextWindowSize(ImVec2(w, h));
-	ImGui::Begin("Shader editor", (bool*)NULL, ImGuiWindowFlags_NoDecoration | 
-			ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
-
-
-
-
-//	ImGui::InputTextMultiline("##shader_code", shader_code, ImGui::GetWindowSize(), ImGuiInputTextFlags_AllowTabInput);
-	ImGui::End();
-}
-*/
-
-
-
-int main() {
+int main(int argc, char** argv) {
+	
+	int fd = -1;
+	if(argc > 1) {
+		if((fd = open(argv[1], O_RDWR)) < 0) {
+			perror("open");
+			fprintf(stderr, "Failed to open file \"%s\"!\nerrno: %i\n", argv[1], errno);
+			return -1;
+		}
+	}
 
 	if(!glfwInit()) {
 		fprintf(stderr, "Failed to initialize glfw!\n");
@@ -141,18 +137,33 @@ int main() {
 	s.WindowPadding = ImVec2(0.0, 0.0);
 	s.WindowRounding = 0.0;
 
-
 	std::string shader_code = GLSL_VERSION "\n"
 			"uniform float  gTime;\n"
 			"uniform vec2   gRes;\n"
 			"\n"
-			"// Welcome back!\n"
 			"\n"
 			"void main() {\n\n"
 			"	vec2 uv = (2.0 * gl_FragCoord.xy - gRes) / gRes.y;\n\n"
 			"	gl_FragColor = vec4(1.0);\n\n"
-			"}\n"
-			;
+			"}\n";
+
+	if(fd >= 0) {
+		struct stat sb;
+		if(fstat(fd, &sb) >= 0) {
+			char* buf = (char*)malloc(sb.st_size+1);
+			if(read(fd, buf, sb.st_size) >= 0) {
+				buf[sb.st_size] = '\0';
+				shader_code = std::string(buf);
+			}
+			else {
+				fprintf(stderr, "Failed to read file!\n");
+			}
+			free(buf);
+		}
+		else {
+			fprintf(stderr, "Failed to get file status!\n");
+		}
+	}
 
 	int fs = 0;
 	int vs = 0;
@@ -160,6 +171,7 @@ int main() {
 
 	int key_down = 0;
 	int key_was_down = 0;
+	int show_editor = 1;
 
 	create_vertex_shader(&vs);
 	create_fragment_shader(&fs, shader_code.c_str());
@@ -171,18 +183,17 @@ int main() {
 
 	TextEditor::Palette palette = texteditor.GetDarkPalette();
 	palette[(int)TextEditor::PaletteIndex::Background]     = 0x55111111;
-	palette[(int)TextEditor::PaletteIndex::LineBackground] = 0xEE111111;
+	palette[(int)TextEditor::PaletteIndex::LineBackground] = 0xAA111111;
 	palette[(int)TextEditor::PaletteIndex::Default]		   = 0xFFFFFFFF;
 	palette[(int)TextEditor::PaletteIndex::Number]		   = 0xFF1188EE;
 	palette[(int)TextEditor::PaletteIndex::LineNumber]	   = 0xFFDDDDDD;
 	palette[(int)TextEditor::PaletteIndex::Comment]          = 0xFF666666;
 	palette[(int)TextEditor::PaletteIndex::MultiLineComment] = 0xFF666666;
 	palette[(int)TextEditor::PaletteIndex::Punctuation]      = 0xFF55CC55;
-	palette[(int)TextEditor::PaletteIndex::CurrentLineFill]  = 0xAA222222;
-	palette[(int)TextEditor::PaletteIndex::CurrentLineEdge]  = 0xAA222222;
+	palette[(int)TextEditor::PaletteIndex::CurrentLineFill]  = 0xAA333333;
+	palette[(int)TextEditor::PaletteIndex::CurrentLineEdge]  = 0xAA333333;
 	palette[(int)TextEditor::PaletteIndex::CursorEdge]       = 0xFFFFFF88;
-	palette[(int)TextEditor::PaletteIndex::Cursor]           = 0x66FFFF88;
-	
+	palette[(int)TextEditor::PaletteIndex::Cursor]           = 0x88FFFF88;
 
 	texteditor.SetPalette(palette);
 	texteditor.SetText(shader_code);
@@ -194,15 +205,18 @@ int main() {
 			key_was_down = 1;
 			create_fragment_shader(&fs, texteditor.GetText().c_str());
 			link_shaders(&shader_program, vs, fs);
+		
+			if(fd >= 0) {
+				const std::string& code = texteditor.GetText();
+				write(fd, code.c_str(), code.size());
+			}
 		}
 		else if(key_down == GLFW_RELEASE) {
 			key_was_down = 0;
 		}
-
-		
+	
 		glClearColor(0.0, 0.0, 0.0, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT);
-
 
 		glUseProgram(shader_program);
 		glUniform1f(glGetUniformLocation(shader_program, "gTime"), glfwGetTime());
@@ -221,25 +235,27 @@ int main() {
 
 		ImGui::SetNextWindowPos(ImVec2(0.0, 0.0));
 		ImGui::SetNextWindowSize(ImVec2(width, height));
-		ImGui::Begin("Shader editor", (bool*)NULL, ImGuiWindowFlags_NoDecoration | 
+		ImGui::Begin("##shader_editor", (bool*)NULL, ImGuiWindowFlags_NoDecoration | 
 			ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
 
-		texteditor.Render("##shader_code", ImGui::GetWindowSize());
-
-		// ...
+		if(show_editor) {
+			texteditor.Render("##shader_code", ImGui::GetWindowSize());
+		}
 
 		ImGui::End();
-
-		//ImGui::ShowDemoWindow();
-		//show_editor(&shader_code, width, height);
-
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
 
+	if(fd >= 0) {
+		close(fd);
+	}
 
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
 	glfwDestroyWindow(window);
 	glfwTerminate();
 	return 0;
