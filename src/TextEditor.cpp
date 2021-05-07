@@ -961,6 +961,7 @@ void TextEditor::Render()
 			auto lineNoWidth = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, buf, nullptr, nullptr).x;
 			drawList->AddText(ImVec2(lineStartScreenPos.x + mTextStart - lineNoWidth, lineStartScreenPos.y), mPalette[(int)PaletteIndex::LineNumber], buf);
 
+
 			if (mState.mCursorPosition.mLine == lineNo)
 			{
 				auto focused = ImGui::IsWindowFocused();
@@ -978,9 +979,11 @@ void TextEditor::Render()
 				{
 					auto timeEnd = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 					auto elapsed = timeEnd - mStartTime;
-					if (elapsed > 400)
+					if (elapsed > 200)
 					{
-						float width = 1.0f;
+
+						auto textSize = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, " ", nullptr, nullptr);
+						float width = textSize.x;
 						auto cindex = GetCharacterIndex(mState.mCursorPosition);
 						float cx = TextDistanceToLineStart(mState.mCursorPosition);
 
@@ -1000,10 +1003,27 @@ void TextEditor::Render()
 								width = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, buf2).x;
 							}
 						}
+
+						const float cursor_edge = 1.5;
+
 						ImVec2 cstart(textScreenPos.x + cx, lineStartScreenPos.y);
 						ImVec2 cend(textScreenPos.x + cx + width, lineStartScreenPos.y + mCharAdvance.y);
 						drawList->AddRectFilled(cstart, cend, mPalette[(int)PaletteIndex::Cursor]);
-						if (elapsed > 800)
+						
+						cstart = ImVec2(textScreenPos.x + cx, lineStartScreenPos.y + textSize.y);
+						cend = ImVec2(textScreenPos.x + cx + width, lineStartScreenPos.y + textSize.y + cursor_edge);
+						drawList->AddRectFilled(cstart, cend, mPalette[(int)PaletteIndex::CursorEdge]);
+						
+						cstart = ImVec2(textScreenPos.x + cx + width, lineStartScreenPos.y);
+						cend = ImVec2(textScreenPos.x + cx + width + cursor_edge, lineStartScreenPos.y + mCharAdvance.y + cursor_edge);
+						drawList->AddRectFilled(cstart, cend, mPalette[(int)PaletteIndex::CursorEdge]);
+						
+						/*
+						ImVec2 cstart(textScreenPos.x + cx, lineStartScreenPos.y);
+						ImVec2 cend(textScreenPos.x + cx + width, lineStartScreenPos.y + mCharAdvance.y);
+						drawList->AddRectFilled(cstart, cend, mPalette[(int)PaletteIndex::Cursor]);
+						*/
+						if (elapsed > 400)
 							mStartTime = timeEnd;
 					}
 				}
@@ -1013,7 +1033,7 @@ void TextEditor::Render()
 			auto prevColor = line.empty() ? mPalette[(int)PaletteIndex::Default] : GetGlyphColor(line[0]);
 			ImVec2 bufferOffset;
 
-			for (int i = 0; i < line.size();)
+			for (size_t i = 0; i < line.size();)
 			{
 				auto& glyph = line[i];
 				auto color = GetGlyphColor(glyph);
@@ -1044,11 +1064,11 @@ void TextEditor::Render()
 						const ImVec2 p2(x2, y);
 						const ImVec2 p3(x2 - s * 0.2f, y - s * 0.2f);
 						const ImVec2 p4(x2 - s * 0.2f, y + s * 0.2f);
-						drawList->AddLine(p1, p2, 0x90909090);
-						drawList->AddLine(p2, p3, 0x90909090);
-						drawList->AddLine(p2, p4, 0x90909090);
+						drawList->AddLine(p1, p2, 0x70909090);
+						drawList->AddLine(p2, p3, 0x70909090);
+						drawList->AddLine(p2, p4, 0x70909090);
 					}
-				}
+				}/*
 				else if (glyph.mChar == ' ')
 				{
 					if (mShowWhitespaces)
@@ -1060,7 +1080,7 @@ void TextEditor::Render()
 					}
 					bufferOffset.x += spaceSize;
 					i++;
-				}
+				}*/
 				else
 				{
 					auto l = UTF8CharLength(glyph.mChar);
@@ -2006,7 +2026,7 @@ void TextEditor::Redo(int aSteps)
 const TextEditor::Palette & TextEditor::GetDarkPalette()
 {
 	const static Palette p = { {
-			0xff7f7f7f,	// Default
+			0xff8f8f8f,	// Default
 			0xffd69c56,	// Keyword	
 			0xff00ff00,	// Number
 			0xff7070e0,	// String
@@ -2884,16 +2904,40 @@ const TextEditor::LanguageDefinition& TextEditor::LanguageDefinition::GLSL()
 	{
 		static const char* const keywords[] = {
 			"vec2", "vec3", "vec4", "mat2", "mat3", "mat4",
-			"auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short",
-			"signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while", "_Alignas", "_Alignof", "_Atomic", "_Bool", "_Complex", "_Generic", "_Imaginary",
+			"auto", "break", "case", "char", "const", "continue",
+		   	"default", "do", "double", "else", "enum", "extern",
+		   	"float", "for", "goto", "if", "inline", "int", "long",
+			"in","out","discard","sampler2D","sampler3D",
+		   	"register", "restrict", "return", "short",
+			"signed", "sizeof", "static", "struct", "switch",
+		   	"typedef", "union", "unsigned", "void", "volatile",
+		   	"while", "_Alignas", "_Alignof", "_Atomic", "_Bool",
+		   	"_Complex", "_Generic", "_Imaginary",
 			"_Noreturn", "_Static_assert", "_Thread_local"
 		};
 		for (auto& k : keywords)
 			langDef.mKeywords.insert(k);
 
 		static const char* const identifiers[] = {
-			"abort", "abs", "acos", "asin", "atan", "atexit", "atof", "atoi", "atol", "ceil", "clock", "cosh", "ctime", "div", "exit", "fabs", "floor", "fmod", "getchar", "getenv", "isalnum", "isalpha", "isdigit", "isgraph",
-			"ispunct", "isspace", "isupper", "kbhit", "log10", "log2", "log", "memcmp", "modf", "pow", "putchar", "putenv", "puts", "rand", "remove", "rename", "sinh", "sqrt", "srand", "strcat", "strcmp", "strerror", "time", "tolower", "toupper"
+			"abs","acos","acosh","all","any","asin","asinh",
+			"atan","atanh","ceil","clamp","cos","cosh","cross",
+			"degrees","distance","dot","exp","exp2",
+			"faceforward","floor","fract","fma","frexp","inverse",
+			"inversesqrt","log","log2","length","max","min","mix",
+			"mod","modf","normalize","pow","radians","reflect","refract",
+			"round","sign","sin","sinh","smoothstep","sqrt","step","tan",
+			"tanh","texture","transpose","trunc"
+			/*
+			"abort", "abs", "acos", "asin", "atan", "atexit", "atof",
+		   	"atoi", "atol", "ceil", "clock", "cosh", "ctime", "div",
+		   	"exit", "fabs", "floor", "fmod", "getchar", "getenv",
+		   	"isalnum", "isalpha", "isdigit", "isgraph",
+			"ispunct", "isspace", "isupper", "kbhit", "log10",
+		   	"log2", "log", "memcmp", "modf", "pow", "putchar",
+		   	"putenv", "puts", "rand", "remove", "rename", "sinh",
+		   	"sqrt", "srand", "strcat", "strcmp", "strerror", "time",
+		   	"tolower", "toupper"
+			*/
 		};
 		for (auto& k : identifiers)
 		{

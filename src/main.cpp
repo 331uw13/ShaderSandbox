@@ -134,10 +134,9 @@ int main() {
 	ImGuiStyle& s = ImGui::GetStyle();
 	io.Fonts->AddFontFromFileTTF(FONT_FILE, FONT_SCALE);
 
-	// Colors	
 	s.Colors[ImGuiCol_WindowBg]         = ImVec4(0.0, 0.0, 0.0, 0.0);
 	s.Colors[ImGuiCol_TextSelectedBg]   = ImVec4(0.0, 0.4, 0.0, 1.0);
-	s.Colors[ImGuiCol_FrameBg]          = ImVec4(0.1, 0.1, 0.1, 0.3);
+	s.Colors[ImGuiCol_FrameBg]          = ImVec4(0.1, 0.1, 0.1, 0.4);
 
 	s.WindowPadding = ImVec2(0.0, 0.0);
 	s.WindowRounding = 0.0;
@@ -151,7 +150,7 @@ int main() {
 			"\n"
 			"void main() {\n\n"
 			"	vec2 uv = (2.0 * gl_FragCoord.xy - gRes) / gRes.y;\n\n"
-			"	gl_FragColor = vec4(0.0);\n\n"
+			"	gl_FragColor = vec4(1.0);\n\n"
 			"}\n"
 			;
 
@@ -171,14 +170,18 @@ int main() {
 	texteditor.SetLanguageDefinition(lang);
 
 	TextEditor::Palette palette = texteditor.GetDarkPalette();
-	palette[(int)TextEditor::PaletteIndex::Background] = 0x22111111;
-	palette[(int)TextEditor::PaletteIndex::Default]    = 0xFFFFFFFF;
-	palette[(int)TextEditor::PaletteIndex::Number]     = 0xFF1188EE;
-	palette[(int)TextEditor::PaletteIndex::LineNumber] = 0xFFDDDDDD;
-	palette[(int)TextEditor::PaletteIndex::Comment]    = 0xFF666666;
-	palette[(int)TextEditor::PaletteIndex::Punctuation]  = 0xFF55CC55;
-	palette[(int)TextEditor::PaletteIndex::CurrentLineFill]  = 0x44333333;
-	palette[(int)TextEditor::PaletteIndex::CurrentLineEdge]  = 0x44333333;
+	palette[(int)TextEditor::PaletteIndex::Background]     = 0x55111111;
+	palette[(int)TextEditor::PaletteIndex::LineBackground] = 0xEE111111;
+	palette[(int)TextEditor::PaletteIndex::Default]		   = 0xFFFFFFFF;
+	palette[(int)TextEditor::PaletteIndex::Number]		   = 0xFF1188EE;
+	palette[(int)TextEditor::PaletteIndex::LineNumber]	   = 0xFFDDDDDD;
+	palette[(int)TextEditor::PaletteIndex::Comment]          = 0xFF666666;
+	palette[(int)TextEditor::PaletteIndex::MultiLineComment] = 0xFF666666;
+	palette[(int)TextEditor::PaletteIndex::Punctuation]      = 0xFF55CC55;
+	palette[(int)TextEditor::PaletteIndex::CurrentLineFill]  = 0xAA222222;
+	palette[(int)TextEditor::PaletteIndex::CurrentLineEdge]  = 0xAA222222;
+	palette[(int)TextEditor::PaletteIndex::CursorEdge]       = 0xFFFFFF88;
+	palette[(int)TextEditor::PaletteIndex::Cursor]           = 0x66FFFF88;
 	
 
 	texteditor.SetPalette(palette);
