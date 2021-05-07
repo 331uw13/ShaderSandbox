@@ -962,7 +962,7 @@ void TextEditor::Render()
 			drawList->AddText(ImVec2(lineStartScreenPos.x + mTextStart - lineNoWidth, lineStartScreenPos.y), mPalette[(int)PaletteIndex::LineNumber], buf);
 
 			// Render background for line.
-			if(line.size() > 0) {
+			if(line.size() > 0 && !HasSelection() && mState.mCursorPosition.mLine != lineNo) {
 				float off = 0.0;
 				for(size_t i = 0; i < line.size(); i++) {
 					auto& g = line[i];
@@ -987,56 +987,44 @@ void TextEditor::Render()
 				{
 					auto end = ImVec2(start.x + contentSize.x + scrollX, start.y + mCharAdvance.y);
 					drawList->AddRectFilled(start, end, mPalette[(int)(focused ? PaletteIndex::CurrentLineFill : PaletteIndex::CurrentLineFillInactive)]);
-					drawList->AddRect(start, end, mPalette[(int)PaletteIndex::CurrentLineEdge], 1.0f);
+					//drawList->AddRect(start, end, mPalette[(int)PaletteIndex::CurrentLineEdge], 1.0f);
 				}
 
 				// Render the cursor
 				if (focused)
 				{
-					auto timeEnd = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-					auto elapsed = timeEnd - mStartTime;
-					if (elapsed > 350)
+					auto textSize = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, " ", nullptr, nullptr);
+					float width = textSize.x;
+					auto cindex = GetCharacterIndex(mState.mCursorPosition);
+					float cx = TextDistanceToLineStart(mState.mCursorPosition);
+
+					if (mOverwrite && cindex < (int)line.size())
 					{
-
-						auto textSize = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, " ", nullptr, nullptr);
-						float width = textSize.x;
-						auto cindex = GetCharacterIndex(mState.mCursorPosition);
-						float cx = TextDistanceToLineStart(mState.mCursorPosition);
-
-						if (mOverwrite && cindex < (int)line.size())
+						auto c = line[cindex].mChar;
+						if (c == '\t')
 						{
-							auto c = line[cindex].mChar;
-							if (c == '\t')
-							{
-								auto x = (1.0f + std::floor((1.0f + cx) / (float(mTabSize) * spaceSize))) * (float(mTabSize) * spaceSize);
-								width = x - cx;
-							}
-							else
-							{
-								char buf2[2];
-								buf2[0] = line[cindex].mChar;
-								buf2[1] = '\0';
-								width = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, buf2).x;
-							}
+							auto x = (1.0f + std::floor((1.0f + cx) / (float(mTabSize) * spaceSize))) * (float(mTabSize) * spaceSize);
+							width = x - cx;
 						}
-
-						const float cursor_edge = 1.5;
-
-						ImVec2 cstart(textScreenPos.x + cx, lineStartScreenPos.y);
-						ImVec2 cend(textScreenPos.x + cx + width, lineStartScreenPos.y + mCharAdvance.y);
-						drawList->AddRectFilled(cstart, cend, mPalette[(int)PaletteIndex::Cursor]);
-						
-						cstart = ImVec2(textScreenPos.x + cx, lineStartScreenPos.y + textSize.y);
-						cend = ImVec2(textScreenPos.x + cx + width, lineStartScreenPos.y + textSize.y + cursor_edge);
-						drawList->AddRectFilled(cstart, cend, mPalette[(int)PaletteIndex::CursorEdge]);
-						
-						cstart = ImVec2(textScreenPos.x + cx + width, lineStartScreenPos.y);
-						cend = ImVec2(textScreenPos.x + cx + width + cursor_edge, lineStartScreenPos.y + mCharAdvance.y + cursor_edge);
-						drawList->AddRectFilled(cstart, cend, mPalette[(int)PaletteIndex::CursorEdge]);
-						
-						if (elapsed > 700)
-							mStartTime = timeEnd;
+						else
+						{
+							char buf2[2];
+							buf2[0] = line[cindex].mChar;
+							buf2[1] = '\0';
+							width = ImGui::GetFont()->CalcTextSizeA(ImGui::GetFontSize(), FLT_MAX, -1.0f, buf2).x;
+						}
 					}
+
+					const float cursor_edge = 2.0;
+
+					ImVec2 cstart(textScreenPos.x + cx, lineStartScreenPos.y);
+					ImVec2 cend(textScreenPos.x + cx + width, lineStartScreenPos.y + mCharAdvance.y);
+					drawList->AddRectFilled(cstart, cend, mPalette[(int)PaletteIndex::Cursor]);
+					
+					cstart = ImVec2(textScreenPos.x + cx, lineStartScreenPos.y);
+					cend = ImVec2(textScreenPos.x + cx + cursor_edge, lineStartScreenPos.y + mCharAdvance.y);
+					drawList->AddRectFilled(cstart, cend, mPalette[(int)PaletteIndex::CursorEdge]);
+						
 				}
 			}
 
@@ -1111,6 +1099,7 @@ void TextEditor::Render()
 			++lineNo;
 		}
 
+		/*
 		// Draw a tooltip on known identifiers/preprocessor symbols
 		if (ImGui::IsMousePosValid())
 		{
@@ -1136,6 +1125,7 @@ void TextEditor::Render()
 				}
 			}
 		}
+		*/
 	}
 
 
@@ -1158,7 +1148,7 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(mPalette[(int)PaletteIndex::Background]));
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 	if (!mIgnoreImGuiChild)
-		ImGui::BeginChild(aTitle, aSize, aBorder, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar | ImGuiWindowFlags_NoMove);
+		ImGui::BeginChild(aTitle, aSize, aBorder, ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoMove);
 
 	if (mHandleKeyboardInputs)
 	{
