@@ -11,6 +11,10 @@
 #include <GLFW/glfw3.h>
 
 
+// https://github.com/nothings/stb
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 // https://github.com/ocornut/imgui
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
@@ -19,6 +23,7 @@
 
 // https://github.com/BalazsJako/ImGuiColorTextEdit
 #include "TextEditor.h" 
+
 
 
 
@@ -32,9 +37,12 @@ void create_vertex_shader(int* id) {
 	*id = glCreateShader(GL_VERTEX_SHADER);
 	if(*id > 0) {
 		const char* src = GLSL_VERSION "\n"
-			"layout(location = 0) in vec3 pos;"
+			"in vec2 pos;"
+			"out vec2 gTexCoord;"
+
 			"void main() {"
-				"gl_Position = vec4(pos, 1.0);"
+				"gl_Position = vec4(pos.x, pos.y, 0.0, 1.0);"
+				"gTexCoord = 1.0-pos;"
 			"}";
 
 		glShaderSource(*id, 1, &src, NULL);
@@ -52,7 +60,7 @@ void create_fragment_shader(int* id, const char* src) {
 		glCompileShader(*id);
 	}
 	else {
-		fprintf(stderr, "Failed to create vertex shader!\n");
+		fprintf(stderr, "Failed to create fragment shader!\n");
 	}
 }
 
@@ -61,6 +69,8 @@ void link_shaders(int* program, int vs, int fs) {
 	glAttachShader(*program, vs);
 	glAttachShader(*program, fs);
 	glLinkProgram(*program);
+
+	// NOTE: its maybe good idea to check errors here too.
 
 	glDeleteShader(vs);
 	glDeleteShader(fs);
@@ -90,17 +100,70 @@ void check_shader_compile_status(int shader, int* shader_ok, char** error_msg, i
 		*error_msg_len = 0;
 		*shader_ok = 1;
 	}
-
 }
+
+unsigned int load_texture(const char* filename) {
+	unsigned int tex = 0;
+	glGenTextures(1, &tex);
+	if(tex > 0) {
+		glBindTexture(GL_TEXTURE_2D, tex);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+		int width = 0;
+		int height = 0;
+		int channels = 0;
+		int format = GL_RGB;
+		unsigned char* data = stbi_load(filename, &width, &height, &channels, 0);
+		
+		switch(channels) {
+			case 0: break;
+			case 1: format = GL_RED;  break;
+			case 2: format = GL_RG;   break;
+			case 3: format = GL_RGB;  break;
+			case 4: format = GL_RGBA; break;
+			default: break;
+		}
+
+		if(data != NULL) {
+			glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+			stbi_image_free(data);
+		}
+		else {
+			fprintf(stderr, "Failed to load texture! %s\n", stbi_failure_reason());
+		}
+
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
+	else {
+		fprintf(stderr, "Failed to generate texture!\n");
+	}
+
+	return tex;
+}
+
+void unload_texture(unsigned int* tex) {
+	if(*tex > 0) {
+		glDeleteTextures(1, tex);
+		*tex = 0;
+	}
+}
+
+
+
 
 static int window_width = 0;
 static int window_height = 0;
+
 
 void glfw_window_size_callback(GLFWwindow* window, int w, int h) {
 	glViewport(0, 0, w, h);
 	window_width = w;
 	window_height = h;
-}	
+}
+
 
 int main(int argc, char** argv) {
 	
@@ -143,9 +206,6 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-	//glfwGetFramebufferSize(window, &width, &height);
-	//glViewport(0, 0, width, height);
-
 	ImGui::CreateContext();
 	ImGui_ImplGlfw_InitForOpenGL(window, 1);
 	ImGui_ImplOpenGL3_Init(GLSL_VERSION);
@@ -154,7 +214,7 @@ int main(int argc, char** argv) {
 	ImGuiStyle& s = ImGui::GetStyle();
 	io.Fonts->AddFontFromFileTTF(FONT_FILE, FONT_SCALE);
 
-	s.Colors[ImGuiCol_WindowBg]         = ImVec4(0.0, 0.0, 0.0, 0.0);
+	s.Colors[ImGuiCol_WindowBg]         = ImVec4(0.0, 0.0, 0.0, 0.1);
 	s.Colors[ImGuiCol_TextSelectedBg]   = ImVec4(0.4, 0.0, 0.0, 1.0);
 	s.Colors[ImGuiCol_Text]             = ImVec4(1.0, 0.2, 0.2, 1.0);
 	s.Colors[ImGuiCol_FrameBg]          = ImVec4(0.1, 0.05, 0.05, 1.0);
@@ -163,16 +223,24 @@ int main(int argc, char** argv) {
 	s.WindowRounding = 0.0;
 	
 	std::string shader_code = GLSL_VERSION "\n"
-			"uniform float  gTime;\n"
-			"uniform vec2   gRes;\n"
+			"uniform float  gTime;      // Seconds elapsed from start.\n"
+			"uniform vec2   gRes;       // Screen resolution.\n"
+			"in      vec2   gTexCoord;  // Texture coordinates.\n"
+			
+			"\n"
+			"// Textures\n"
+			"uniform sampler2D gTexture0;\n"
+			"uniform sampler2D gTexture1;\n"
+			//"uniform sampler2D gTexture0;\n"
 			"\n"
 			"\n"
 			"\n"
-			"void main() {\n\n"
+			"\n"
+			"void main() {\n"
 			"	vec2 uv = (2.0 * gl_FragCoord.xy - gRes) / gRes.y;\n"
 			"	vec3 rainbow = 0.5 + 0.5 * cos(gTime + acos(cos(uv.y)) + vec3(0,2,4));\n"
-			"	gl_FragColor = vec4(rainbow, 1.0);\n\n"
-			"}\n";
+			"	gl_FragColor = vec4(rainbow, 1.0) * texture(gTexture0, gTexCoord);\n"
+			"}\n\n";
 
 	if(fd >= 0) {
 		struct stat sb;
@@ -212,19 +280,28 @@ int main(int argc, char** argv) {
 	TextEditor::Palette palette = texteditor.GetDarkPalette();
 	palette[(int)TextEditor::PaletteIndex::Background]     = 0xAA111111;
 	palette[(int)TextEditor::PaletteIndex::LineBackground] = 0xAA111111;
-	palette[(int)TextEditor::PaletteIndex::Default]		   = 0xFFFFFFFF;
+	//palette[(int)TextEditor::PaletteIndex::Default]		   = 0xFFFFFFFF;
 	palette[(int)TextEditor::PaletteIndex::Number]		   = 0xFF1188EE;
 	palette[(int)TextEditor::PaletteIndex::LineNumber]	   = 0xFFDDDDDD;
 	palette[(int)TextEditor::PaletteIndex::Selection]      = 0xFF664433;
 	palette[(int)TextEditor::PaletteIndex::Comment]          = 0xFF666666;
 	palette[(int)TextEditor::PaletteIndex::MultiLineComment] = 0xFF666666;
 	palette[(int)TextEditor::PaletteIndex::Punctuation]      = 0xFF55CC55;
-	palette[(int)TextEditor::PaletteIndex::CurrentLineFill]  = 0xDD222222;
+	palette[(int)TextEditor::PaletteIndex::CurrentLineFill]  = 0xAA252525;
 	palette[(int)TextEditor::PaletteIndex::CursorEdge]       = 0xFFFFFF88;
 	palette[(int)TextEditor::PaletteIndex::Cursor]           = 0x33FFFF88;
 
 	texteditor.SetPalette(palette);
 	texteditor.SetText(shader_code);
+	texteditor.SetShowWhitespaces(0);
+
+	std::vector<unsigned int> textures = {
+		
+		load_texture("./Textures/grass.png"),
+		load_texture("./Textures/test.png"),
+
+	};
+	
 
 
 	while(!glfwWindowShouldClose(window)) {
@@ -249,7 +326,7 @@ int main(int argc, char** argv) {
 
 		glClearColor(0.0, 0.0, 0.0, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT);
-		
+
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
@@ -257,6 +334,14 @@ int main(int argc, char** argv) {
 
 		if(shader_ok) {
 			glUseProgram(shader_program);
+
+			for(int i = 0; i < textures.size(); i++) {
+				glActiveTexture(GL_TEXTURE0 + i);
+				glBindTexture(GL_TEXTURE_2D, textures[i]);
+			}
+			
+			glUniform1i(glGetUniformLocation(shader_program, "gTexture0"), 0);
+			glUniform1i(glGetUniformLocation(shader_program, "gTexture1"), 1);
 			glUniform1f(glGetUniformLocation(shader_program, "gTime"), glfwGetTime());
 			glUniform2f(glGetUniformLocation(shader_program, "gRes"), window_width, window_height);
 			
@@ -268,12 +353,12 @@ int main(int argc, char** argv) {
 			glEnd();
 		}
 
-		ImGui::SetNextWindowPos(ImVec2(0.0, 0.0));
-		ImGui::SetNextWindowSize(ImVec2(window_width, window_height));
-		ImGui::Begin("##shader_editor", (bool*)NULL, ImGuiWindowFlags_NoDecoration |
-			ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
-
 		if(show_editor) {
+			ImGui::SetNextWindowPos(ImVec2(0.0, 0.0));
+			ImGui::SetNextWindowSize(ImVec2(window_width, window_height));
+			ImGui::Begin("##shader_editor", (bool*)NULL, ImGuiWindowFlags_NoDecoration |
+				ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
+
 			texteditor.Render("##shader_code", ImVec2(window_width, 
 						shader_ok ? window_height : (double)window_height/1.5));
 
@@ -282,9 +367,9 @@ int main(int argc, char** argv) {
 						ImVec2(window_width, (double)window_height/3.0), ImGuiInputTextFlags_ReadOnly);
 			}
 
-		}
 
-		ImGui::End();
+			ImGui::End();
+		}
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		glfwSwapBuffers(window);
@@ -298,7 +383,9 @@ int main(int argc, char** argv) {
 	if(error_msg != NULL) {
 		free(error_msg);
 	}
-	
+
+	glDeleteTextures(textures.size(), &textures[0]);
+
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
